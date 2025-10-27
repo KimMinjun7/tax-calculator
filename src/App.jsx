@@ -818,7 +818,7 @@ export default function YearEndTaxCalculator() {
                 <div className="bg-white rounded-xl shadow-lg p-8 text-center">
                   <Calculator className="w-16 h-16 mx-auto text-gray-300 mb-4" />
                   <p className="text-gray-500">
-                    좌측에 정보를 입력하시면<br />
+                    빈칸에 정보를 입력하시면<br />
                     예상 환급액을 계산해드립니다
                   </p>
                 </div>
