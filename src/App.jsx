@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Calculator, TrendingUp, Users, Home, Heart, BookOpen, Wallet, Gift, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { Calculator, TrendingUp, Users, Home, Heart, BookOpen, Wallet, Gift, ChevronDown, ChevronUp, Info, HelpCircle } from 'lucide-react';
 
 export default function YearEndTaxCalculator() {
   const [activeTab, setActiveTab] = useState('calculator');
   const [income, setIncome] = useState('');
-  const [dependents, setDependents] = useState(0);
-  const [children, setChildren] = useState(0);
+  const [dependents, setDependents] = useState('0');
+  const [children, setChildren] = useState('0');
   const [creditCard, setCreditCard] = useState('');
   const [debitCard, setDebitCard] = useState('');
   const [medicalExpense, setMedicalExpense] = useState('');
@@ -20,6 +20,9 @@ export default function YearEndTaxCalculator() {
   const [housingLoan, setHousingLoan] = useState('');
   const [mortgageInterest, setMortgageInterest] = useState('');
   const [expandedSection, setExpandedSection] = useState(null);
+  const [showDependentsTooltip, setShowDependentsTooltip] = useState(false);
+  const [showChildrenTooltip, setShowChildrenTooltip] = useState(false);
+  const [paidTax, setPaidTax] = useState('');
 
   // 2025년 최신 세법 반영 계산 함수
   const calculateDeductions = () => {
@@ -41,7 +44,8 @@ export default function YearEndTaxCalculator() {
     }
 
     // 인적공제 (1인당 150만원)
-    const personalDeduction = (dependents + 1) * 1500000;
+    const dependentsCount = parseFloat(dependents) || 0;
+    const personalDeduction = (dependentsCount + 1) * 1500000;
 
     // 보험료 소득공제 (전액)
     const insuranceDeduction = (parseFloat(healthInsurance) || 0) + (parseFloat(employmentInsurance) || 0);
@@ -124,12 +128,13 @@ export default function YearEndTaxCalculator() {
     let taxCredit = 0;
 
     // 자녀세액공제 (2025년 개정)
-    if (children === 1) {
+    const childrenCount = parseFloat(children) || 0;
+    if (childrenCount === 1) {
       taxCredit += 250000;
-    } else if (children === 2) {
+    } else if (childrenCount === 2) {
       taxCredit += 550000; // 2명 55만원으로 증가
-    } else if (children >= 3) {
-      taxCredit += 550000 + (children - 2) * 400000; // 셋째부터 40만원씩
+    } else if (childrenCount >= 3) {
+      taxCredit += 550000 + (childrenCount - 2) * 400000; // 셋째부터 40만원씩
     }
 
     // 보장성보험료 세액공제
@@ -165,13 +170,28 @@ export default function YearEndTaxCalculator() {
       taxCredit += rentAmount * rentRate;
     }
 
-    // 기부금 세액공제 (15-30%)
+    // 기부금 세액공제
     const donationAmount = parseFloat(donation) || 0;
-    // 1천만원 이하: 15%, 초과분: 30%
-    taxCredit += Math.min(donationAmount, 10000000) * 0.15 + Math.max(0, donationAmount - 10000000) * 0.30;
+    // 10만원 이하: 100% 전액공제 (정치자금기부금, 고향사랑기부제 등)
+    // 10만원 초과 ~ 1천만원: 15%
+    // 1천만원 초과: 30%
+    if (donationAmount <= 100000) {
+      taxCredit += donationAmount;
+    } else if (donationAmount <= 10000000) {
+      taxCredit += 100000 + (donationAmount - 100000) * 0.15;
+    } else {
+      taxCredit += 100000 + (10000000 - 100000) * 0.15 + (donationAmount - 10000000) * 0.30;
+    }
 
     // 결정세액
     const finalTax = Math.max(0, calculatedTax - taxCredit);
+
+    // 기납부세액
+    const paidTaxAmount = parseFloat(paidTax) || 0;
+    
+    // 환급액 또는 추가납부액 계산
+    // 기납부세액 - 결정세액 = 환급액(양수) 또는 추가납부액(음수)
+    const refundOrPayment = finalTax - paidTaxAmount ;
 
     return {
       totalIncome,
@@ -185,7 +205,10 @@ export default function YearEndTaxCalculator() {
       calculatedTax,
       taxCredit,
       finalTax,
-      estimatedRefund: calculatedTax * 0.1 // 예상 환급액 (간이 추정)
+      paidTaxAmount,
+      refundOrPayment,
+      isRefund: refundOrPayment > 0,
+      isAdditionalPayment: refundOrPayment < 0
     };
   };
 
@@ -231,6 +254,19 @@ export default function YearEndTaxCalculator() {
   ];
 
   const deductionTips = [
+    {
+      category: '부양가족 및 자녀 공제 상세',
+      items: [
+        '공제대상 자녀 범위: ①직계비속(자녀, 손자녀) ②재혼 배우자의 자녀(사실혼 제외) ③입양자 ④직계비속과 배우자 모두 장애인인 경우 배우자(며느리/사위)',
+        '공제 요건: ①연간 소득금액 100만원 이하(근로소득만 있는 경우 총급여 500만원 이하) ②만 20세 이하(장애인은 나이 무관)',
+        '공제금액: 1인당 연 150만원 기본공제, 자녀는 추가로 자녀세액공제 가능',
+        '주민등록상 별거 중이어도 공제 가능, 연도 중 사망한 경우도 공제 가능',
+        '재혼한 배우자의 자녀, 외국국적 자녀, 군복무 중 자녀, 친권 없는 이혼 자녀도 공제 가능',
+        '만 20세 초과 장애인 자녀(소득금액 100만원 이하): 기본공제, 자녀세액공제, 장애인공제, 보장성보험료, 의료비, 교육비, 기부금, 신용카드 모두 공제 가능',
+        '만 20세 초과 비장애인 자녀(소득금액 100만원 이하): 의료비, 교육비, 신용카드, 기부금만 공제 가능',
+        '자녀가 연도 중 취업하여 소득금액 100만원 초과 시 취업 전 지출 교육비·의료비는 공제 가능'
+      ]
+    },
     {
       category: '소득공제',
       items: [
@@ -366,33 +402,124 @@ export default function YearEndTaxCalculator() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      기납부세액 (연간 원천징수 합계)
+                    </label>
+                    <input
+                      type="number"
+                      value={paidTax}
+                      onChange={(e) => setPaidTax(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      급여명세서의 '소득세' 항목 연간 합계
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        부양가족 수 (본인 제외)
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-semibold text-gray-700">
+                          부양가족 수 (본인 제외)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowDependentsTooltip(!showDependentsTooltip)}
+                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          <HelpCircle className="w-3 h-3" />
+                          {showDependentsTooltip ? '닫기' : '도움말'}
+                        </button>
+                      </div>
+                      
+                      {showDependentsTooltip && (
+                        <div className="mb-3 p-3 bg-blue-50 border-l-4 border-blue-500 rounded text-xs">
+                          <p className="font-semibold text-blue-900 mb-2">✓ 공제 요건:</p>
+                          <ul className="text-blue-800 space-y-1 ml-2">
+                            <li>• 연간 소득금액 100만원 이하</li>
+                            <li>• 만 60세 이상 부모(배우자 부모 포함)</li>
+                            <li>• 만 20세 이하 자녀</li>
+                            <li>• 장애인은 나이 무관</li>
+                          </ul>
+                          <p className="text-blue-900 font-semibold mt-2">💰 1인당 150만원 공제</p>
+                        </div>
+                      )}
+                      
                       <input
                         type="number"
                         value={dependents}
-                        onChange={(e) => setDependents(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setDependents(e.target.value)}
                         min="0"
+                        placeholder="0"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        배우자, 부모, 형제자매 등
+                      </p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        자녀 수
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-semibold text-gray-700">
+                          자녀 수
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowChildrenTooltip(!showChildrenTooltip)}
+                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          <HelpCircle className="w-3 h-3" />
+                          {showChildrenTooltip ? '닫기' : '도움말'}
+                        </button>
+                      </div>
+                      
+                      {showChildrenTooltip && (
+                        <div className="mb-3 p-3 bg-green-50 border-l-4 border-green-500 rounded text-xs">
+                          <p className="font-semibold text-green-900 mb-2">✓ 공제대상 자녀:</p>
+                          <ul className="text-green-800 space-y-1 ml-2">
+                            <li>• 직계비속(자녀, 손자녀)</li>
+                            <li>• 재혼 배우자의 자녀</li>
+                            <li>• 입양자(법적/사실상 입양)</li>
+                          </ul>
+                          <p className="font-semibold text-green-900 mb-2 mt-2">✓ 공제 요건:</p>
+                          <ul className="text-green-800 space-y-1 ml-2">
+                            <li>• 연간 소득금액 100만원 이하</li>
+                            <li>• 만 20세 이하(장애인 나이무관)</li>
+                          </ul>
+                          <p className="text-green-700 mt-2">✓ 별거, 외국국적, 군복무중도 가능</p>
+                        </div>
+                      )}
+                      
                       <input
                         type="number"
                         value={children}
-                        onChange={(e) => setChildren(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setChildren(e.target.value)}
                         min="0"
+                        placeholder="0"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        만 20세 이하, 소득 100만원 이하
+                      </p>
                     </div>
                   </div>
+                  
+                  {/* 자녀 공제 안내 박스 */}
+                  {((parseFloat(children) || 0) > 0) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                      <p className="text-xs text-blue-800 font-semibold mb-1">📌 자녀세액공제 예상</p>
+                      <p className="text-xs text-blue-700">
+                        {(parseFloat(children) || 0) === 1 && '1명: 25만원'}
+                        {(parseFloat(children) || 0) === 2 && '2명: 55만원 (1명당 25만원, 2명 추가 5만원)'}
+                        {(parseFloat(children) || 0) >= 3 && `3명 이상: ${(550000 + ((parseFloat(children) || 0) - 2) * 400000).toLocaleString()}원`}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        * 부양가족 수에도 포함하여 1인당 150만원 기본공제 추가
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -472,7 +599,7 @@ export default function YearEndTaxCalculator() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        보장성보험료 (일반)
+                        보장성보험료 (연간)
                       </label>
                       <input
                         type="number"
@@ -481,7 +608,6 @@ export default function YearEndTaxCalculator() {
                         placeholder="0"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
                       />
-                      <p className="text-xs text-gray-500 mt-1">한도 100만원, 12% 공제</p>
                     </div>
 
                     <div>
@@ -495,7 +621,6 @@ export default function YearEndTaxCalculator() {
                         placeholder="0"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
                       />
-                      <p className="text-xs text-gray-500 mt-1">한도 100만원, 15% 공제</p>
                     </div>
                   </div>
 
@@ -524,7 +649,6 @@ export default function YearEndTaxCalculator() {
                         placeholder="0"
                         className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
                       />
-                      <p className="text-xs text-gray-500 mt-1">노인장기요양보험 포함</p>
                     </div>
 
                     <div>
@@ -541,39 +665,35 @@ export default function YearEndTaxCalculator() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        주택임차차입금 원리금
-                      </label>
-                      <input
-                        type="number"
-                        value={housingLoan}
-                        onChange={(e) => setHousingLoan(e.target.value)}
-                        placeholder="0"
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">상환액의 40% 공제</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        장기주택저당차입금 이자
-                      </label>
-                      <input
-                        type="number"
-                        value={mortgageInterest}
-                        onChange={(e) => setMortgageInterest(e.target.value)}
-                        placeholder="0"
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">이자상환액 (조건별 한도 상이)</p>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      주택임차차입금 원리금
+                    </label>
+                    <input
+                      type="number"
+                      value={housingLoan}
+                      onChange={(e) => setHousingLoan(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      기부금
+                      장기주택저당차입금 이자
+                    </label>
+                    <input
+                      type="number"
+                      value={mortgageInterest}
+                      onChange={(e) => setMortgageInterest(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      기부금 (연간)
                     </label>
                     <input
                       type="number"
@@ -591,12 +711,20 @@ export default function YearEndTaxCalculator() {
             <div className="space-y-4">
               {result ? (
                 <>
-                  <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-                    <h3 className="text-xl font-bold mb-4">예상 환급액</h3>
+                  <div className={`bg-gradient-to-br ${result.isRefund ? 'from-red-600 to-orange-600' : 'from-blue-600 to-purple-600'} rounded-xl shadow-lg p-6 text-white`}>
+                    <h3 className="text-xl font-bold mb-4">
+                      {result.isRefund ? '추가 납부 예상액' : result.isAdditionalPayment ? '예상 환급액' : '환급/납부 없음'}
+                    </h3>
                     <div className="text-4xl font-bold mb-2">
-                      {result.estimatedRefund.toLocaleString()}원
+                      {result.isRefund && '+ '}
+                      {result.isAdditionalPayment && '- '}
+                      {Math.abs(result.refundOrPayment).toLocaleString()}원
                     </div>
-                    <p className="text-blue-100">* 간이 추정치입니다</p>
+                    <p className="text-sm opacity-90">
+                      {result.isRefund && '💰 추가 납부 필요'}
+                      {result.isAdditionalPayment && '💸 환급 예상'}
+                      {!result.isRefund && !result.isAdditionalPayment && '✓ 정산 완료'}
+                    </p>
                   </div>
 
                   <div className="bg-white rounded-xl shadow-lg p-6">
@@ -658,13 +786,31 @@ export default function YearEndTaxCalculator() {
                           {result.finalTax.toLocaleString()}원
                         </span>
                       </div>
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">기납부세액</span>
+                        <span className="font-semibold text-orange-600">
+                          -{result.paidTaxAmount.toLocaleString()}원
+                        </span>
+                      </div>
+                      <div className={`flex justify-between py-4 px-4 rounded-lg ${result.isRefund ? 'bg-blue-50' : result.isAdditionalPayment ? 'bg-red-50' : 'bg-gray-50'}`}>
+                        <span className="text-gray-800 font-bold text-xl">
+                          {result.isRefund ? '추가납부액' : result.isAdditionalPayment ? '환급액' : '정산금액'}
+                        </span>
+                        <span className={`font-bold text-xl ${result.isRefund ? 'text-blue-600' : result.isAdditionalPayment ? 'text-red-600' : 'text-gray-600'}`}>
+                          {result.isRefund && '+ '}
+                          {result.isAdditionalPayment && '- '}
+                          {Math.abs(result.refundOrPayment).toLocaleString()}원
+                        </span>
+                      </div>
                     </div>
                   </div>
 
                   <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
                     <p className="text-sm text-gray-700">
-                      <strong>💡 Tip:</strong> 실제 환급액은 기납부 세액과 비교하여 결정됩니다. 
-                      정확한 계산은 홈택스의 '연말정산 미리보기' 서비스를 이용하세요.
+                      <strong>💡 계산식:</strong> 기납부세액 - 결정세액 = {result.isRefund ? '환급액' : result.isAdditionalPayment ? '추가납부액' : '0원'}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-2">
+                      정확한 계산은 국세청 홈택스의 '연말정산 미리보기' 서비스를 이용하세요.
                     </p>
                   </div>
                 </>
